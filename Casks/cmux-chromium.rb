@@ -1,6 +1,6 @@
 cask "cmux-chromium" do
-  version "0.64.6-chromium.51"
-  sha256 "e5759809e750385c4c68f1627450962fcfef8c193cfb0ac484b73e933991f698"
+  version "0.64.6-chromium.53"
+  sha256 "400507d13c10b9e1fb2ec6f579e9f9f668d145cc517a40705309399b62113d76"
 
   url "https://github.com/TimoBechtel/cmux/releases/download/chromium-#{version}/cmux-chromium-macos-arm64.zip"
   name "cmux Chromium"
