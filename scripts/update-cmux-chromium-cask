@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "json"
+require "net/http"
+require "open-uri"
+require "uri"
+
+REPO = "TimoBechtel/cmux"
+TAG_PREFIX = "chromium-"
+ASSET_NAME = "cmux-chromium-macos-arm64.zip"
+CASK_PATH = File.expand_path("../Casks/cmux-chromium.rb", __dir__)
+
+def github_json(path)
+  uri = URI("https://api.github.com/#{path}")
+  request = Net::HTTP::Get.new(uri)
+  request["Accept"] = "application/vnd.github+json"
+  request["X-GitHub-Api-Version"] = "2022-11-28"
+
+  token = ENV["GITHUB_TOKEN"] || ENV["GH_TOKEN"]
+  request["Authorization"] = "Bearer #{token}" if token && !token.empty?
+
+  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
+    http.request(request)
+  end
+
+  abort "GitHub API request failed: #{response.code} #{response.message}" unless response.is_a?(Net::HTTPSuccess)
+
+  JSON.parse(response.body)
+end
+
+def asset_sha256(asset)
+  digest = asset["digest"]
+  return digest.delete_prefix("sha256:") if digest&.start_with?("sha256:")
+
+  token = ENV["GITHUB_TOKEN"] || ENV["GH_TOKEN"]
+  headers = token && !token.empty? ? { "Authorization" => "Bearer #{token}" } : {}
+  Digest::SHA256.hexdigest(URI.open(asset.fetch("browser_download_url"), headers, &:read))
+end
+
+release = github_json("repos/#{REPO}/releases/latest")
+tag_name = release.fetch("tag_name")
+abort "Latest release tag must start with #{TAG_PREFIX}: #{tag_name}" unless tag_name.start_with?(TAG_PREFIX)
+
+asset = release.fetch("assets").find { |candidate| candidate.fetch("name") == ASSET_NAME }
+abort "Release #{tag_name} does not include #{ASSET_NAME}" unless asset
+
+version = tag_name.delete_prefix(TAG_PREFIX)
+sha256 = asset_sha256(asset)
+
+cask = File.read(CASK_PATH)
+abort "Cask is missing a version stanza" unless cask.match?(/^  version ".*"$/)
+abort "Cask is missing a sha256 stanza" unless cask.match?(/^  sha256 ".*"$/)
+
+updated_cask = cask
+              .sub(/^  version ".*"$/, %(  version "#{version}"))
+              .sub(/^  sha256 ".*"$/, %(  sha256 "#{sha256}"))
+
+if updated_cask == cask
+  puts "cmux-chromium is already at #{version}"
+else
+  File.write(CASK_PATH, updated_cask)
+  puts "Updated cmux-chromium to #{version}"
+end

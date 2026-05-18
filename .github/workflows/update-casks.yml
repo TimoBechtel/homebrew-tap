@@ -1,0 +1,78 @@
+name: Update casks
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-casks
+  cancel-in-progress: false
+
+jobs:
+  cmux-chromium:
+    runs-on: macos-latest
+
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+        with:
+          token: ${{ github.token }}
+
+      - name: Cache Homebrew Bundler RubyGems
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-rubygems-
+
+      - name: Install Homebrew Bundler RubyGems
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: brew install-bundler-gems
+
+      - name: Update cmux Chromium cask
+        run: scripts/update-cmux-chromium-cask
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Validate cask
+        run: |
+          brew style --cask timobechtel/tap/cmux-chromium
+          brew audit --cask --no-signing --arch=arm timobechtel/tap/cmux-chromium
+          brew livecheck --cask timobechtel/tap/cmux-chromium
+
+      - name: Check for update
+        id: update
+        run: |
+          if git diff --quiet -- Casks/cmux-chromium.rb; then
+            echo "No cask update."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Configure git
+        if: steps.update.outputs.changed == 'true'
+        uses: Homebrew/actions/git-user-config@main
+
+      - name: Commit update
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          version="$(ruby -ne 'puts $1 if /^  version "([^"]+)"/' Casks/cmux-chromium.rb)"
+
+          git add Casks/cmux-chromium.rb
+          git commit -m "Update cmux Chromium cask to ${version}"
+
+      - name: Push update
+        if: steps.update.outputs.changed == 'true'
+        uses: Homebrew/actions/git-try-push@main
+        with:
+          token: ${{ github.token }}
+          directory: ${{ github.workspace }}
+          branch: main
