@@ -17,4 +17,9 @@ cask "cmux-chromium" do
 
   app "cmux Chromium.app"
   binary "#{appdir}/cmux Chromium.app/Contents/Resources/bin/cmux"
+
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/cmux Chromium.app"]
+  end
 end
