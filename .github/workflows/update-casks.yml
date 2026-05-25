@@ -1,4 +1,4 @@
-name: Update casks
+name: Update Homebrew tap
 
 on:
   schedule:
@@ -9,14 +9,17 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-casks
+  group: update-homebrew-tap
   cancel-in-progress: false
 
 jobs:
-  cmux-chromium:
+  update:
     runs-on: macos-latest
 
     steps:
+      - name: Check out tap
+        uses: actions/checkout@v4
+
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
@@ -38,17 +41,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Validate cask
+      - name: Update hey-comma formula
+        run: scripts/update-hey-comma-formula
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Validate cask and formula
         run: |
           brew style --cask timobechtel/tap/cmux-chromium
           brew audit --cask --no-signing --arch=arm timobechtel/tap/cmux-chromium
           brew livecheck --cask timobechtel/tap/cmux-chromium
+          brew style --formula timobechtel/tap/hey-comma
+          brew audit --formula --strict --online timobechtel/tap/hey-comma
+          brew livecheck --formula timobechtel/tap/hey-comma
 
       - name: Check for update
         id: update
         run: |
-          if git diff --quiet -- Casks/cmux-chromium.rb; then
-            echo "No cask update."
+          if git diff --quiet -- Casks/cmux-chromium.rb Formula/hey-comma.rb; then
+            echo "No tap update."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -62,10 +73,8 @@ jobs:
       - name: Commit update
         if: steps.update.outputs.changed == 'true'
         run: |
-          version="$(ruby -ne 'puts $1 if /^  version "([^"]+)"/' Casks/cmux-chromium.rb)"
-
-          git add Casks/cmux-chromium.rb
-          git commit -m "Update cmux Chromium cask to ${version}"
+          git add Casks/cmux-chromium.rb Formula/hey-comma.rb
+          git commit -m "Update Homebrew tap packages"
 
       - name: Push update
         if: steps.update.outputs.changed == 'true'
