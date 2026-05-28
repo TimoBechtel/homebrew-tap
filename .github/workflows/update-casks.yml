@@ -2,7 +2,7 @@ name: Update casks
 
 on:
   schedule:
-    - cron: "23 4 * * *"
+    - cron: "43 3 * * *"
   workflow_dispatch:
 
 permissions:
